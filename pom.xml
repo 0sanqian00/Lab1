@@ -19,7 +19,7 @@
 
     <dependencies>
 
-
+        <!-- 测试gitC4 -->
         <dependency>
             <groupId>org.graphstream</groupId>
             <artifactId>gs-core</artifactId>
