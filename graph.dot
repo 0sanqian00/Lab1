@@ -89,3 +89,11 @@ digraph G {
   "glow" -> "across" [label="1"];
   "softly" -> "in" [label="1"];
   "landscape" -> "as" [label="1"];
+  "trees" [style=filled, fillcolor=red];
+  "swayed" [style=filled, fillcolor=red];
+  "gently" [style=filled, fillcolor=red];
+  "in" [style=filled, fillcolor=red];
+  "trees" -> "swayed" [color=red, style=bold];
+  "swayed" -> "gently" [color=red, style=bold];
+  "gently" -> "in" [color=red, style=bold];
+}
