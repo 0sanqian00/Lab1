@@ -95,23 +95,25 @@ public class Main {
                 // 转换为小写，并将非字母字符替换为空格
                 line = line.toLowerCase().replaceAll("[^a-z ]", " ");
 
-                // 分割单词
+                // 分一个或多个连续的空白字符来分割字符串
                 String[] words = line.split("\\s+");
 
                 for (int i = 0; i < words.length - 1; i++) {
                     String currentWord = words[i];
                     String nextWord = words[i + 1];
 
-                    // 更新单词频率
+                    // 计算每个单词的出现频率。如果currentWord不在映射中，则默认为0，然后加1。
                     wordFrequency.put(currentWord, wordFrequency.getOrDefault(currentWord, 0) + 1);
 
-                    // 添加边和更新权重
+                    // 添加边和更新权重 如果不存在则创建一个新的HashSet 将nextWord添加到这个HashSet中
                     graph.computeIfAbsent(currentWord, k -> new HashSet<>()).add(nextWord);
+                    // updateWeight方法更新图中两个单词之间边的权重
                     updateWeight(currentWord, nextWord);
                 }
             }
-
+            // 获取图的顶点数
             V = graph.size();
+            // 初始化邻接矩阵
             dist = new int[V][V];
         } catch (IOException e) {
             e.printStackTrace();
@@ -186,14 +188,14 @@ public class Main {
             return "No " + word1 + " or " + word2 + " in the graph!";
         }
 
-        // 转换成邻接矩阵，这里假设边的权重为1
 
+        //初始时两个顶点之间的距离是无穷大，除了对角线元素，它们被设置为0，因为每个顶点到自身的距离是0。
         for (int i = 0; i < V; i++) {
             for (int j = 0; j < V; j++) {
                 dist[i][j] = (i == j) ? 0 : Integer.MAX_VALUE;
             }
         }
-
+        //为图中的每个顶点填充邻接矩阵。如果两个顶点之间有边相连，则将对应的邻接矩阵元素设置为1，表示权重为1
         // 填充邻接矩阵
         for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
             String word = entry.getKey();
@@ -207,7 +209,7 @@ public class Main {
             }
         }
 
-        // 弗洛伊德算法填充所有顶点对的最短路径
+        // 使用弗洛伊德算法，通过中间顶点k来更新顶点对(i, j)的最短路径。如果通过k的路径比已知的(i, j)路径更短，则更新dist[i][j]
         for (int k = 0; k < V; k++) {
             for (int i = 0; i < V; i++) {
                 for (int j = 0; j < V; j++) {
@@ -229,6 +231,7 @@ public class Main {
         }
 
         // 返回word1和word2之间的最短路径长度
+
         return "The shortest path distance from " + word1 + " to " + word2 + " is: " + dist[index1][index2];
     }
 
@@ -343,27 +346,36 @@ public class Main {
 
     // 查询桥接词
     public static String queryBridgeWords(String word1, String word2) {
-        if (!graph.containsKey(word1) || !graph.containsKey(word2)) {
-            return "No " + word1 + " or " + word2 + " in the graph!";
-        }
+            if (!graph.containsKey(word1) || !graph.containsKey(word2)) {
+                return "No " + word1 + " or " + word2 + " in the graph!";
+            }
 
-        Set<String> bridgeWords = new HashSet<>();
-        // 遍历word1的所有后继节点
-        for (String successor : graph.get(word1)) {
-            // 检查这些后继节点是否也是word2的前驱
-            if (graph.get(word2).contains(successor)) {
-                bridgeWords.add(successor);
+            Set<String> bridgeWords = new HashSet<>();
+            Set<String> successorsWord1 = graph.get(word1);
+            Set<String> predecessorsWord2 = new HashSet<>(graph.size()); // 记录word2的前驱节点
+
+            // 寻找word2的前驱节点
+            for (String key : graph.keySet()) {
+                Set<String> successors = graph.get(key);
+                if (successors.contains(word2)) {
+                    predecessorsWord2.add(key);
+                }
+            }
+
+             // 遍历word1的所有后继节点，检查是否也是word2的前驱节点
+            for (String successor : successorsWord1) {
+                if (predecessorsWord2.contains(successor)) {
+                    bridgeWords.add(successor);
+                }
+            }
+
+            if (bridgeWords.isEmpty()) {
+                return "No bridge words from " + word1 + " to " + word2 + "!";
+            } else {
+                return "The bridge words from " + word1 + " to " + word2 + " are: " +
+                        String.join(", ", bridgeWords);
             }
         }
-
-        if (bridgeWords.isEmpty()) {
-            return "No bridge words from " + word1 + " to " + word2 + "!";
-        } else {
-            // 将桥接词转换为字符串，单词之间用逗号和空格分隔
-            return "The bridge words from " + word1 + " to " + word2 + " are: " +
-                    String.join(", ", bridgeWords);
-        }
-    }
 
     // 根据bridge word生成新文本
     public static String generateNewText(String inputText) {
@@ -384,7 +396,7 @@ public class Main {
             // 查询这对相邻单词的桥接词
             String bridgeWordsResult = queryBridgeWords(words[i], words[i + 1]);
             // 如果桥接词结果以"No bridge words"开头，则表示没有桥接词
-            if (bridgeWordsResult.startsWith("No bridge words")) {
+            if (bridgeWordsResult.startsWith("No")) {
                 // 不插入任何单词，继续
                 continue;
             }
