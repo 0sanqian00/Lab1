@@ -35,13 +35,14 @@ public class Main {
      * 存储图中每条边的权重.
      * 键是起始单词，值是另一个映射，其键是目的单词，值是边的权重.
      */
+    private static volatile boolean stopRandomWalk = false;
     private static Map<String, Map<String, Integer>> edgeWeights;
 
     /**
      * 一个用于随机游走的Random实例.
      * 被声明为final以确保在多线程环境下的安全性.
      */
-    private static final Random random;
+    private static final Random random = new Random();
 
     /**
      * 表示图中顶点的最大数量.
