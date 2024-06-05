@@ -5,15 +5,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Random;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Scanner;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.*;
 
 /**
  * Main class for the application.
@@ -53,8 +45,11 @@ public class Main {
      * 存储顶点对之间的最短路径长度.
      * 二维数组，其中dist[i][j]表示从顶点i到顶点j的最短路径长度.
      */
-    private static volatile boolean stopRandomWalk = false;
+
     private static int[][] dist;
+    private static volatile boolean stopRandomWalk = false;
+
+//    private static int[][] predecessor;
 
     /**
      * 程序的主入口点，初始化数据结构，读取文件，并提供用户交互菜单.
@@ -74,10 +69,13 @@ public class Main {
         edgeWeights = new HashMap<>();
 
 
+
         // 读取文本文件并构建图
         readTextFileAndBuildGraph("C:\\Users\\三谦\\Desktop\\软件工程\\Lab1\\Lab1\\test\\test1.txt",graph,
                 wordFrequency, edgeWeights);
-
+        V = graph.size();
+        dist = new int[V][V]; // 确保这部分在图构建完成后进行初始化
+//        predecessor = new int[V][V];
         Scanner scanner = new Scanner(System.in);
         char choice;
 
@@ -119,14 +117,14 @@ public class Main {
                     String wordA = scanner.nextLine();
                     System.out.print("Enter word 2: ");
                     String wordB = scanner.nextLine();
-                    showDirectedGraphWithShortestPath(wordA, wordB);
+                    showDirectedGraphWithShortestPath(graph, edgeWeights, dist, V, wordA, wordB);
                 }
                 case '5' -> {
                     System.out.println(
                             "\nPerforming a random walk... Press 's' to stop.");
                     stopRandomWalk = false; // 重置停止标志
                     // 使用线程执行随机游走
-                    Thread randomWalkThread = new Thread(Main::randomWalk);
+                    Thread randomWalkThread = new Thread(() -> randomWalk());
                     randomWalkThread.start();
 
                     // 等待用户输入以停止游走或返回主菜单
@@ -192,8 +190,7 @@ public class Main {
                     updateWeight(edgeWeights, currentWord, nextWord);
                 }
             }
-            V = graph.size();
-            dist = new int[V][V]; // 确保这部分在图构建完成后进行初始化
+
 
 
         } catch (IOException e) {
@@ -368,34 +365,40 @@ public class Main {
 
 
 
-    // 计算两个单词之间的最短路径
-    public static String calcShortestPath(
-            final String word1, final String word2) {
+    public static String calcShortestPath(final Map<String, Set<String>> graph,
+                                          final Map<String, Map<String, Integer>> edgeWeights,
+                                          final int[][] dist,
+                                          final int V,
+                                          final String word1,
+                                          final String word2) {
         if (!graph.containsKey(word1) || !graph.containsKey(word2)) {
             return "No " + word1 + " or " + word2 + " in the graph!";
         }
-
+        if (word1 == word2){
+            return word1 + " = " + word2 + " The shortest path distance is 0.";
+        }
         // 转换成邻接矩阵，这里假设边的权重为1
-
         for (int i = 0; i < V; i++) {
             for (int j = 0; j < V; j++) {
                 dist[i][j] = (i == j) ? 0 : Integer.MAX_VALUE;
             }
         }
-
         // 填充邻接矩阵
         for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
             String word = entry.getKey();
-            Set<String> neighbors = entry.getValue();
-            for (String neighbor : neighbors) {
-                int index1 = getIndex(word);
-                int index2 = getIndex(neighbor);
-                if (index1 != -1 && index2 != -1) {
-                    dist[index1][index2] = 1;
+            Map<String, Integer> weights = edgeWeights.get(word);
+            if (weights != null) {
+                for (Map.Entry<String, Integer> weightEntry : weights.entrySet()) {
+                    String neighbor = weightEntry.getKey();
+                    int weight = weightEntry.getValue();
+                    int index1 = getIndex(graph, word);
+                    int index2 = getIndex(graph, neighbor);
+                    if (index1 != -1 && index2 != -1) {
+                        dist[index1][index2] = weight; // 设置边的权重
+                    }
                 }
             }
         }
-
         // 弗洛伊德算法填充所有顶点对的最短路径
         for (int k = 0; k < V; k++) {
             for (int i = 0; i < V; i++) {
@@ -408,23 +411,15 @@ public class Main {
                 }
             }
         }
-
         // 找到word1和word2对应的索引
-        int index1 = getIndex(word1);
-        int index2 = getIndex(word2);
-
+        int index1 = getIndex(graph,word1);
+        int index2 = getIndex(graph,word2);
         // 如果最短距离是无穷大，说明word1和word2不相连
         if (dist[index1][index2] == Integer.MAX_VALUE) {
             return "No path between " + word1 + " and " + word2 + ".";
         }
         // 提取最短路径
-        List<String> shortestPath = extractShortestPath(word1, word2);
-
-        // 检查是否有路径
-        if (shortestPath.size() < 2) {
-            return "No path between " + word1 + " and " + word2 + ".";
-        }
-
+        List<String> shortestPath = extractShortestPath(graph, dist, V, word1, word2);
         // 使用StringBuilder构建带箭头的路径字符串
         StringBuilder pathWithArrows = new StringBuilder(
                 "The shortest path from ").append(word1).append(" to ")
@@ -435,19 +430,20 @@ public class Main {
                 pathWithArrows.append(" → ");
             }
         }
-
         System.out.println(pathWithArrows.toString()); // 打印带箭头的路径
         // 返回word1和word2之间的最短路径长度
         return "The shortest path distance from "
                 + word1 + " to " + word2 + " is: "
                 + dist[index1][index2];
     }
-
-
     public static void showDirectedGraphWithShortestPath(
+            final Map<String, Set<String>> graph,
+            final Map<String, Map<String, Integer>> edgeWeights,
+            final int[][] dist,
+            final int V,
             final String word1, final String word2) {
         // 首先，计算最短路径
-        String shortestPathResult = calcShortestPath(word1, word2);
+        String shortestPathResult = calcShortestPath(graph, edgeWeights, dist, V, word1, word2);
         if (!shortestPathResult.startsWith("The shortest path distance")) {
             System.out.println(shortestPathResult);
             return;
@@ -495,7 +491,7 @@ public class Main {
             // 此处需要根据calcShortestPath方法的具体实现来确定最短路径上的节点和边
             // 假设 shortestPath 是一个包含最短路径上节点的列表
             List<String> shortestPath =
-                    extractShortestPath(word1, word2); // 需要实现这个方法
+                    extractShortestPath(graph, dist, V, word1, word2); // 需要实现这个方法
 
             for (String node : shortestPath) {
                 out.printf(
@@ -529,7 +525,11 @@ public class Main {
         }
     }
 
+
     public static List<String> extractShortestPath(
+            final Map<String, Set<String>> graph,
+            final int[][] dist,
+            final int V,
             final String word1, final String word2) {
         List<String> path = new ArrayList<>();
         Map<String, Integer> indexMap = new HashMap<>();
@@ -546,9 +546,10 @@ public class Main {
         // 从word1开始，正向追踪最短路径
         int at = index1;
         path.add(word1); // 添加起始节点
-
-        while (at != index2) {
-            for (int to = 0; to < V; to++) {
+        int flag = 0;
+        while (at != index2&& flag!=V) {
+            flag = 0;
+            for (int to = 0; to < V; to++,flag++) {
                 if (dist[at][to] == 1
                         && dist[to][index2] != Integer.MAX_VALUE) {
                     at = to;
@@ -563,7 +564,7 @@ public class Main {
 
 
     // 辅助函数，用于获取单词在邻接矩阵中的索引
-    private static int getIndex(final String word) {
+    private static int getIndex(final Map<String, Set<String>> graph, final String word) {
         int index = 0;
         for (String w : graph.keySet()) {
             if (w.equals(word)) {

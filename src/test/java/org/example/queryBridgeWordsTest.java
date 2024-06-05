@@ -36,6 +36,7 @@ public class queryBridgeWordsTest {
         wordFrequency = new HashMap<>();
         edgeWeights = new HashMap<>();
         Main.readTextFileAndBuildGraph("C:\\Users\\三谦\\Desktop\\软件工程\\Lab1\\Lab1\\test\\test1.txt", graph, wordFrequency, edgeWeights);
+
     }
 
     // 测试用例1: word1和word2都在图中，存在桥接词
