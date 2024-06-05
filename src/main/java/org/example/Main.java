@@ -2,27 +2,29 @@ package org.example;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Map;
+import java.util.Set;
+import java.nio.charset.StandardCharsets;
 import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Random;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.Scanner;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.security.SecureRandom;
-import java.nio.charset.StandardCharsets;
 import java.io.InputStreamReader;
 import java.io.InputStream;
+import java.io.FileWriter;
 /**
  * Main class for the application.
  */
 public final class Main {
-    private Main() { };
+    private Main() { }
     /**
      * 表示图中单词之间的有向边.
      * 键是单词。值是该单词可以指向的单词集合.
@@ -61,14 +63,29 @@ public final class Main {
      * 一个用于随机游走的Random实例.
      * 被声明为final以确保在多线程环境下的安全性.
      */
-//    private static final Random RANDOM = new Random();
-    private static final SecureRandom secureRandom; // 使用SecureRandom代替Random
-    private static final String graphvizPath; // 图形化工具路径
+    private static final SecureRandom SECURE_RANDOM; // 使用SecureRandom代替Random
+    /**
+     * 定义Graphviz图形化工具的路径.
+     *
+     * 这个路径指向Graphviz安装目录下的可执行文件，用于将DOT语言描述的图形转换成可视化的图片格式。
+     * 需要确保该路径正确指向Graphviz的安装目录，并且具有执行权限。
+     */
+    private static final String GRAPHVIZ_PATH; // 图形化工具路径
+
+    /**
+     * 定义生成的图形文件的存储路径.
+     *
+     * 这个路径用于指定生成的图形文件（如PNG格式）的存放位置。
+     * 需要确保该路径是可写的，并且应用程序有足够的权限在该位置创建文件。
+     */
+    private static final String FILE_PATH; // 文件存储路径
     static {
-        secureRandom = new SecureRandom(); // 初始化SecureRandom
-        graphvizPath = "D:\\\\software_lab\\"
+        SECURE_RANDOM = new SecureRandom(); // 初始化SecureRandom
+        GRAPHVIZ_PATH = "D:\\software_lab\\"
                 +
                 "\\Graphviz-11.0.0-win64\\bin\\dot.exe"; // 将路径设置为常量
+        FILE_PATH = "D:\\software_lab\\lab3\\Lab1\\test\\test1.txt";
+
     }
     /**
      * 表示图中顶点的最大数量.
@@ -98,12 +115,11 @@ public final class Main {
         graph = new HashMap<>();
         wordFrequency = new HashMap<>();
         edgeWeights = new HashMap<>();
-
         // 读取文本文件并构建图
-        readTextFileAndBuildGraph("D:\\software_lab\\LAB_1\\test1.txt");
+        readTextFileAndBuildGraph(FILE_PATH);
 
         InputStream inputStream = System.in;
-        Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8.name());
+        Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8);
         char choice;
 
         do {
@@ -136,22 +152,27 @@ public final class Main {
                     System.out.println(
                             "Enter a line of text to generate new text:");
                     String inputText = scanner.nextLine();
+                    String generatedText = generateNewText(
+                            inputText, SECURE_RANDOM);
                     System.out.println("Generated new text: "
-                            + generateNewText(inputText));
+                            + generatedText);
                 }
                 case '4' -> {
                     System.out.print("Enter word 1: ");
                     String wordA = scanner.nextLine();
                     System.out.print("Enter word 2: ");
                     String wordB = scanner.nextLine();
-                    showDirectedGraphWithShortestPath(wordA, wordB);
+                    showDirectedGraphWithShortestPath(
+                            graph, edgeWeights, dist,
+                            vertex, wordA, wordB);
                 }
                 case '5' -> {
                     System.out.println(
                             "\nPerforming a random walk... Press 's' to stop.");
                     stopRandomWalk = false; // 重置停止标志
                     // 使用线程执行随机游走
-                    Thread randomWalkThread = new Thread(Main::randomWalk);
+                    Thread randomWalkThread = new Thread(
+                            () -> randomWalk(SECURE_RANDOM));
                     randomWalkThread.start();
 
                     // 等待用户输入以停止游走或返回主菜单
@@ -190,7 +211,10 @@ public final class Main {
      * @throws IOException 如果读取文件时发生I/O错误。
      */
     private static void readTextFileAndBuildGraph(final String filePath) {
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(filePath), StandardCharsets.UTF_8))) {
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(
+                        new FileInputStream(filePath),
+                        StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) {
                 // 转换为小写，并将非字母字符替换为空格
@@ -260,47 +284,70 @@ public final class Main {
         String pngFilePath = "D:\\software_lab\\LAB_1\\graph.png";
 
         // 创建DOT文件
-        try (PrintWriter out = new PrintWriter(new FileWriter(dotFilePath))) {
-            out.println("digraph G {");
-            out.println("  rankdir=LR;"); // 设置图的方向从左到右
+        try {
+            // 使用 Paths.get 来创建 Path 对象
+            Path path = Paths.get(dotFilePath);
+            // 使用 try-with-resources 确保文件被正确关闭
+            try (PrintWriter out = new PrintWriter(
+                    Files.newBufferedWriter(path, StandardCharsets.UTF_8))) {
+                out.println("digraph G {");
+                out.println("  rankdir=LR;"); // 设置图的方向从左到右
 
-            // 添加节点
-            for (String node : graph.keySet()) {
-                out.println(
-                        "  \"" + escapeDotString(node) + "\" [shape=circle];");
-            }
-
-            // 添加边和权重
-            for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
-                String fromNode = entry.getKey();
-                for (String toNode : entry.getValue()) {
-                    // 获取边的权重
-                    int weight = edgeWeights.getOrDefault(
-                            fromNode, new HashMap<>()).getOrDefault(toNode, 0);
-                    // 将权重作为标签添加到边
-                    out.printf(
-                            "  \"%s\" -> \"%s\" [label=\"%d\"];\n",
-                            escapeDotString(fromNode),
-                            escapeDotString(toNode), weight);
+                // 添加节点
+                for (String node : graph.keySet()) {
+                    out.println(
+                            "  \"" + escapeDotString(node)
+                                    + "\" [shape=circle];");
                 }
-            }
 
-            out.println("}");
+                // 添加边和权重
+                for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
+                    String fromNode = entry.getKey();
+                    for (String toNode : entry.getValue()) {
+                        // 获取边的权重
+                        int weight = edgeWeights.getOrDefault(
+                                fromNode,
+                                new HashMap<>()).getOrDefault(toNode, 0);
+                        // 将权重作为标签添加到边
+                        out.printf(
+                                "  \"%s\" -> \"%s\" [label=\"%d\"];%n",
+                                escapeDotString(fromNode),
+                                escapeDotString(toNode), weight);
+                    }
+                }
+
+                out.println("}");
+            } // try-with-resources 自动关闭文件
         } catch (IOException e) {
             e.printStackTrace();
-            return;
         }
 
         // 使用Graphviz命令行工具生成图形
         try {
-            // 构建dot命令
-            String command = graphvizPath
-                    + " -Tpng " + dotFilePath + " -o " + pngFilePath;
-            Process process = Runtime.getRuntime().exec(command);
+            // 使用 ProcessBuilder 来避免命令注入风险
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    GRAPHVIZ_PATH, "-Tpng", dotFilePath, "-o", pngFilePath
+            );
+
+            // 启动进程
+            Process process = processBuilder.start();
+
+            // 等待进程执行完成
             process.waitFor();
-            System.out.println("Graph visualization generated as '"
-                    + pngFilePath + "'");
-        } catch (IOException | InterruptedException e) {
+
+            // 检查进程是否成功执行
+            if (process.exitValue() == 0) {
+                System.out.println(
+                        "Graph visualization"
+                                + "generated as '" + pngFilePath + "'");
+            } else {
+                System.err.println("Error generating graph visualization.");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            // 处理进程被中断的异常
+            Thread.currentThread().interrupt();
             e.printStackTrace();
         }
     }
@@ -332,15 +379,24 @@ public final class Main {
         Set<String> successorsWord1 = graph.get(word1);
         Set<String> predecessorsWord2
                 = new HashSet<>(graph.size()); // 记录word2的前驱节点
-
         // 寻找word2的前驱节点
-        for (String key : graph.keySet()) {
-            Set<String> successors = graph.get(key);
-            if (successors.contains(word2)) {
-                predecessorsWord2.add(key);
+        //直接遍历 entrySet()，因为 entrySet() 迭代器提供了每个键和对应值的访问，无需额外的查找。
+        for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
+            if (entry.getValue().contains(word2)) {
+                predecessorsWord2.add(entry.getKey());
             }
         }
-
+//        Set<String> bridgeWords = new HashSet<>();
+//        Set<String> successorsWord1 = graph.get(word1);
+//        Set<String> predecessorsWord2 = new HashSet<>(); // 记录word2的前驱节点
+//
+//        // 寻找word2的所有前驱节点
+//        for (String key : graph.keySet()) { // keySet() 方法来获取所有键的集合
+//            Set<String> successors = graph.get(key); //调用了 get() 方法来获取对应的值
+//            if (successors.contains(word2)) {
+//                predecessorsWord2.add(key);
+//            }
+//        }
         // 遍历word1的所有后继节点，检查是否也是word2的前驱节点
         for (String successor : successorsWord1) {
             if (predecessorsWord2.contains(successor)) {
@@ -358,26 +414,26 @@ public final class Main {
 
 
     /**
-     * 根据提供的输入文本生成新文本，通过在相邻单词对之间插入桥接词.
-     * <p>
-     * 此方法首先将输入文本转换为小写，并分割成单词数组。然后，对于每对相邻单词，
-     * 方法会查询它们之间的桥接词。如果存在桥接词，将随机选择一个并插入到新文本中。
-     * 最后，方法将新文本的单词列表合并为一个字符串，并返回生成的新文本。
-     * </p>
+     * 生成一个新的文本，其中在每对相邻单词之间插入一个随机的桥接词.
      *
-     * @param inputText 输入文本，将被分析并用于生成新文本。
-     * @return 生成的新文本，包含原始单词和随机插入的桥接词。
-     * @see #queryBridgeWords(String, String)
+     * 此方法接受一个输入文本，并使用SecureRandom生成随机数来选择桥接词。
+     * 桥接词是通过调用queryBridgeWords方法查询得到的，该方法返回两个单词之间的所有可能桥接词。
+     * 如果没有桥接词可用，则不插入任何词，直接连接相邻的单词。
+     *
+     * @param inputText 输入文本，将被分割成单词并插入桥接词。
+     * @param random 安全随机数生成器，用于从桥接词列表中随机选择一个词。
+     * @return 新生成的文本，其中每对相邻单词之间插入了一个随机的桥接词。
      */
-    public static String generateNewText(final String inputText) {
+    public static String generateNewText(
+            final String inputText, final SecureRandom random) {
         // 使用空格分割输入文本，得到单词数组
         String[] words = inputText.toLowerCase().split("\\s+");
 
         // 结果列表，用于存储新文本的单词
         List<String> newWords = new ArrayList<>();
 
-        // 用于随机选择桥接词
-        Random random = new Random();
+//        // 用于随机选择桥接词
+//        Random random = new Random();
 
         // 遍历单词数组，查找每对相邻单词的桥接词
         for (int i = 0; i < words.length - 1; i++) {
@@ -398,7 +454,7 @@ public final class Main {
                     bridgeWordsResult.indexOf(':') + 2).trim().split(", ");
             // 随机选择一个桥接词
             String bridgeWord =
-                    bridgeWordArray[secureRandom.nextInt(bridgeWordArray.length)];
+                    bridgeWordArray[random.nextInt(bridgeWordArray.length)];
             newWords.add(bridgeWord);
         }
 
@@ -413,77 +469,80 @@ public final class Main {
 
     /**
      * 计算图中两个单词之间的最短路径.
-     * <p>
-     * 该方法使用Floyd-Warshall算法来计算所有顶点对之间的最短路径，
-     * 并特别返回两个指定单词之间的最短路径。如果图中不包含指定的单词
-     * 或者这两个单词之间没有路径相连，则返回相应的信息。
-     * </p>
      *
-     * @param word1 起点单词。
-     * @param word2 终点单词。
-     * @return 如果两个单词之间存在路径，返回它们的最短路径和距离的描述；
-     *         如果不存在路径，返回相应的信息。
-     * @see #graph
-     * @see #vertex
-     * @see #dist
-     * @see #extractShortestPath(String, String)
+     * 此方法使用Floyd-Warshall算法来计算图中所有顶点对之间的最短路径，
+     * 然后提取两个指定单词之间的最短路径，并以字符串形式返回。
+     * 如果两个单词不在图中，或者它们之间没有路径，则返回相应的错误消息。
+     *
+     * @param graphcalc 图的表示，键是单词，值是与该单词相连的其他单词的集合。
+     * @param edgeWeightscalc 边的权重映射，键是起点单词，值是到其他单词的权重映射。
+     * @param distcalc 距离矩阵，表示任意两个单词之间的最短距离。
+     * @param vertexcalc 图中单词的总数。
+     * @param word1 起始单词。
+     * @param word2 目标单词。
+     * @return 两个单词之间的最短路径的描述，或者错误消息。
      */
     public static String calcShortestPath(
-            final String word1, final String word2) {
-        if (!graph.containsKey(word1) || !graph.containsKey(word2)) {
+            final Map<String, Set<String>> graphcalc,
+            final Map<String, Map<String, Integer>>
+                    edgeWeightscalc,
+            final int[][] distcalc,
+                                          final int vertexcalc,
+                                          final String word1,
+                                          final String word2) {
+        if (!graphcalc.containsKey(word1) || !graphcalc.containsKey(word2)) {
             return "No " + word1 + " or " + word2 + " in the graph!";
         }
-
         // 转换成邻接矩阵，这里假设边的权重为1
-
-        for (int i = 0; i < vertex; i++) {
-            for (int j = 0; j < vertex; j++) {
-                dist[i][j] = (i == j) ? 0 : Integer.MAX_VALUE;
+        for (int i = 0; i < vertexcalc; i++) {
+            for (int j = 0; j < vertexcalc; j++) {
+                distcalc[i][j] = (i == j) ? 0 : Integer.MAX_VALUE;
             }
         }
-
         // 填充邻接矩阵
         for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
             String word = entry.getKey();
-            Set<String> neighbors = entry.getValue();
-            for (String neighbor : neighbors) {
-                int index1 = getIndex(word);
-                int index2 = getIndex(neighbor);
-                if (index1 != -1 && index2 != -1) {
-                    dist[index1][index2] = 1;
-                }
-            }
-        }
-
-        // 弗洛伊德算法填充所有顶点对的最短路径
-        for (int k = 0; k < vertex; k++) {
-            for (int i = 0; i < vertex; i++) {
-                for (int j = 0; j < vertex; j++) {
-                    if (dist[i][k] != Integer.MAX_VALUE
-                            && dist[k][j] != Integer.MAX_VALUE
-                            && dist[i][k] + dist[k][j] < dist[i][j]) {
-                        dist[i][j] = dist[i][k] + dist[k][j];
+            Map<String, Integer> weights = edgeWeightscalc.get(word);
+            if (weights != null) {
+                for (
+                        Map.Entry<String,
+                                Integer> weightEntry : weights.entrySet()) {
+                    String neighbor = weightEntry.getKey();
+                    int weight = weightEntry.getValue();
+                    int index1 = getIndex(word);
+                    int index2 = getIndex(neighbor);
+                    if (index1 != -1 && index2 != -1) {
+                        distcalc[index1][index2] = weight; // 设置边的权重
                     }
                 }
             }
         }
-
+        // 弗洛伊德算法填充所有顶点对的最短路径
+        for (int k = 0; k < vertexcalc; k++) {
+            for (int i = 0; i < vertexcalc; i++) {
+                for (int j = 0; j < vertexcalc; j++) {
+                    if (distcalc[i][k] != Integer.MAX_VALUE
+                            && distcalc[k][j] != Integer.MAX_VALUE
+                            && dist[i][k] + distcalc[k][j] < dist[i][j]) {
+                        distcalc[i][j] = distcalc[i][k] + distcalc[k][j];
+                    }
+                }
+            }
+        }
         // 找到word1和word2对应的索引
         int index1 = getIndex(word1);
         int index2 = getIndex(word2);
-
         // 如果最短距离是无穷大，说明word1和word2不相连
         if (dist[index1][index2] == Integer.MAX_VALUE) {
             return "No path between " + word1 + " and " + word2 + ".";
         }
         // 提取最短路径
-        List<String> shortestPath = extractShortestPath(word1, word2);
-
+        List<String> shortestPath = extractShortestPath(
+                graph, dist, vertexcalc, word1, word2);
         // 检查是否有路径
         if (shortestPath.size() < 2) {
             return "No path between " + word1 + " and " + word2 + ".";
         }
-
         // 使用StringBuilder构建带箭头的路径字符串
         StringBuilder pathWithArrows = new StringBuilder(
                 "The shortest path from ").append(word1).append(" to ")
@@ -494,7 +553,6 @@ public final class Main {
                 pathWithArrows.append(" → ");
             }
         }
-
         System.out.println(pathWithArrows.toString()); // 打印带箭头的路径
         // 返回word1和word2之间的最短路径长度
         return "The shortest path distance from "
@@ -502,24 +560,30 @@ public final class Main {
                 + dist[index1][index2];
     }
 
+
     /**
-     * 显示有向图，并高亮显示两个单词之间的最短路径.
-     * <p>
-     * 该方法首先计算两个给定单词之间的最短路径。如果图中不包含单词或
-     * 没有路径连接它们，则直接显示相关信息。如果存在路径，则继续创建一个
-     * DOT 文件来描述图的结构，包括节点和边的样式。最短路径上的节点和边将被
-     * 特别标记以高亮显示。然后，使用Graphviz工具生成并保存图的可视化表示为PNG文件。
-     * </p>
+     * 显示有向图并高亮显示两个指定单词之间的最短路径.
      *
-     * @param word1 起点单词。
-     * @param word2 终点单词。
-     * @see #calcShortestPath(String, String)
-     * @see #extractShortestPath(String, String)
+     * 此方法首先计算两个单词之间的最短路径，然后使用Graphviz工具生成一个图形文件，
+     * 其中最短路径上的节点和边将以特殊样式显示。
+     *
+     * @param graphshow 图的表示，键是节点，值是与该节点相连的其他节点的集合。
+     * @param edgeWeightsshow 边的权重映射，键是起点节点，值是到其他节点的权重映射。
+     * @param distshow 距离矩阵，表示任意两个节点之间的最短距离。
+     * @param vertexshow 图中节点的总数。
+     * @param word1 起始单词节点。
+     * @param word2 目标单词节点。
      */
     public static void showDirectedGraphWithShortestPath(
+            final Map<String, Set<String>> graphshow,
+            final Map<String, Map<String, Integer>> edgeWeightsshow,
+            final int[][] distshow,
+            final int vertexshow,
             final String word1, final String word2) {
+        String pngFilePath = "D:\\software_lab\\LAB_1\\graph.png";
         // 首先，计算最短路径
-        String shortestPathResult = calcShortestPath(word1, word2);
+        String shortestPathResult = calcShortestPath(
+                graphshow, edgeWeightsshow, distshow, vertexshow, word1, word2);
         if (!shortestPathResult.startsWith("The shortest path distance")) {
             System.out.println(shortestPathResult);
             return;
@@ -527,36 +591,29 @@ public final class Main {
 
         // 然后，创建DOT文件并添加常规的图结构
         String dotFilePath = "graph.dot";
-        String graphvizPath = "D:\\software_lab"
-                +
-                "\\Graphviz-11.0.0-win64\\bin\\dot.exe";
-        String pngFilePath = "D:\\software_lab\\LAB_1"
-                +
-                "\\graph_with_shortest_path.png";
-
-        try (PrintWriter out = new PrintWriter(new FileWriter(dotFilePath))) {
+        try (PrintWriter out = new PrintWriter(
+                new FileWriter(dotFilePath, StandardCharsets.UTF_8))) {
             out.println("digraph G {");
             out.println("  rankdir=LR;");
             out.println("  node[shape=circle];");
 
             // 添加节点
-            for (String node : graph.keySet()) {
+            for (String node : graphshow.keySet()) {
                 out.printf(
-                        "  \"%s\" [style=filled, fillcolor=lightgray];\n",
+                        "  \"%s\" [style=filled, fillcolor=lightgray];%n",
                         escapeDotString(node));
             }
 
             // 添加边
-            for (
-                    Map.Entry<String,
-                            Set<String>> entry : graph.entrySet()) {
+            for (Map.Entry<String,
+                    Set<String>> entry : graphshow.entrySet()) {
                 String fromNode = entry.getKey();
                 for (String toNode : entry.getValue()) {
-                    int weight = edgeWeights.getOrDefault(
+                    int weight = edgeWeightsshow.getOrDefault(
                             fromNode,
                             new HashMap<>()).getOrDefault(toNode, 0);
                     out.printf(
-                            "  \"%s\" -> \"%s\" [label=\"%d\"];\n",
+                            "  \"%s\" -> \"%s\" [label=\"%d\"];%n",
                             escapeDotString(fromNode),
                             escapeDotString(toNode),
                             weight);
@@ -567,17 +624,22 @@ public final class Main {
             // 此处需要根据calcShortestPath方法的具体实现来确定最短路径上的节点和边
             // 假设 shortestPath 是一个包含最短路径上节点的列表
             List<String> shortestPath =
-                    extractShortestPath(word1, word2); // 需要实现这个方法
+                    extractShortestPath(
+                            graphshow,
+                            distshow,
+                            vertexshow,
+                            word1,
+                            word2); // 需要实现这个方法
 
             for (String node : shortestPath) {
                 out.printf(
-                        "  \"%s\" [style=filled, fillcolor=red];\n",
+                        "  \"%s\" [style=filled, fillcolor=red];%n",
                         escapeDotString(node));
             }
             for (int i = 0; i < shortestPath.size() - 1; i++) {
                 String fromNode = shortestPath.get(i);
                 String toNode = shortestPath.get(i + 1);
-                out.printf("  \"%s\" -> \"%s\" [color=red, style=bold];\n",
+                out.printf("  \"%s\" -> \"%s\" [color=red, style=bold];%n",
                         escapeDotString(fromNode), escapeDotString(toNode));
             }
 
@@ -589,41 +651,47 @@ public final class Main {
 
         // 使用Graphviz命令行工具生成图形
         try {
-            String command = graphvizPath
-                    + " -Tpng " + dotFilePath + " -o " + pngFilePath;
-            Process process = Runtime.getRuntime().exec(command);
+            // 使用ProcessBuilder来避免命令行注入
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    GRAPHVIZ_PATH, "-Tpng", dotFilePath, "-o", pngFilePath);
+            Process process = processBuilder.start();
             process.waitFor();
             System.out.println(
-                    "Graph with highlighted shortest path generated as '"
-                            + pngFilePath + "'");
+                    "Graph with highlighted shortest path "
+                            +
+                            "generated as '" + pngFilePath + "'");
         } catch (IOException | InterruptedException e) {
+            // 记录错误并给用户一个通用的错误消息
             e.printStackTrace();
+            // 可能还需要记录错误或通知管理员
         }
     }
+
     /**
-     * 从图中提取两个单词之间的最短路径.
-     * <p>
-     * 该方法基于Floyd-Warshall算法计算的最短路径距离矩阵，
-     * 通过正向追踪从起点单词到终点单词的路径。
-     * 它首先创建一个索引映射，将每个单词映射到其在图中的索引。
-     * 然后，从起始单词开始，逐步追踪到终点单词，直到到达终点单词。
-     * 路径上的每个单词都被添加到结果列表中。
-     * </p>
+     * 提取图中两个单词之间的最短路径.
      *
-     * @param word1 起点单词。
-     * @param word2 终点单词。
-     * @return 包含最短路径上所有单词的列表。
-     * @see #vertex
-     * @see #dist
+     * 此方法通过给定的图和距离矩阵，找到两个单词之间的最短路径。
+     * 图以Map的形式给出，其中键是单词，值是与该单词相连的其他单词的集合。
+     * 距离矩阵是一个二维数组，表示任意两个节点之间的距离。
+     *
+     * @param graphextract 表示图的Map，键是单词，值是与该单词相连的其他单词的集合。
+     * @param distextract 表示节点间距离的二维数组。
+     * @param vertexextract 图中节点的总数。
+     * @param word1 起始单词。
+     * @param word2 目标单词。
+     * @return 包含最短路径上所有单词的List。
      */
     public static List<String> extractShortestPath(
+            final Map<String, Set<String>> graphextract,
+            final int[][] distextract,
+            final int vertexextract,
             final String word1, final String word2) {
         List<String> path = new ArrayList<>();
         Map<String, Integer> indexMap = new HashMap<>();
 
         // 首先构建一个从索引到单词的映射
-        for (int i = 0; i < vertex; i++) {
-            String word = (String) graph.keySet().toArray()[i];
+        for (int i = 0; i < vertexextract; i++) {
+            String word = (String) graphextract.keySet().toArray()[i];
             indexMap.put(word, i);
         }
 
@@ -633,13 +701,14 @@ public final class Main {
         // 从word1开始，正向追踪最短路径
         int at = index1;
         path.add(word1); // 添加起始节点
-
-        while (at != index2) {
-            for (int to = 0; to < vertex; to++) {
-                if (dist[at][to] == 1
-                        && dist[to][index2] != Integer.MAX_VALUE) {
+        int flag = 0;
+        while (at != index2 && flag != vertexextract) {
+            flag = 0;
+            for (int to = 0; to < vertexextract; to++, flag++) {
+                if (distextract[at][to] == 1
+                        && distextract[to][index2] != Integer.MAX_VALUE) {
                     at = to;
-                    path.add((String) graph.keySet().toArray()[at]);
+                    path.add((String) graphextract.keySet().toArray()[at]);
                     break;
                 }
             }
@@ -673,22 +742,15 @@ public final class Main {
     }
 
     /**
-     * 执行图上的随机游走.
-     * <p>
-     * 此方法从图中随机选择一个起始节点，并执行随机游走，直到遇到重复的边或用户请求停止。
-     * 每次游走的路径都会被记录并打印出来。
-     * </p>
+     * 执行一个随机游走过程在图上.
      *
-     * <p>
-     * 如果图是空的，会打印提示信息 "The graph is empty!" 并结束游走。
-     * 游走过程中，如果遇到没有邻居节点的孤立节点，游走将停止。
-     * 用户可以通过设置 {@code stopRandomWalk} 标志为 {@code true} 来随时停止游走。
-     * </p>
+     * 随机游走从一个随机节点开始，然后逐步随机选择一个未访问过的邻居节点。
+     * 游走持续进行，直到所有节点都被访问过或用户请求停止。
+     * 每次游走的路径会被打印出来。
      *
-     * @see #graph
-     * @see #stopRandomWalk
+     * @param random 安全随机数生成器，用于随机选择节点和邻居。
      */
-    public static void randomWalk() {
+    public static void randomWalk(final SecureRandom random) {
 
         try {
             Set<String> visitedEdges = new HashSet<>();
@@ -703,7 +765,7 @@ public final class Main {
 
             // 随机选择一个起始节点
             String startNode = allNodes.stream()
-                    .skip(secureRandom.nextInt(allNodes.size()))
+                    .skip(random.nextInt(allNodes.size()))
                     .findFirst()
                     .orElseThrow();
 
@@ -717,7 +779,7 @@ public final class Main {
                 String nextNode
                         = neighbors.isEmpty() ? null : neighbors
                         .toArray(new String[0])
-                        [secureRandom.nextInt(neighbors.size())];
+                        [SECURE_RANDOM.nextInt(neighbors.size())];
 
                 // 检查是否已经访问过从当前节点到该邻居的边
                 String edgeKey = currentNode + "-" + nextNode; // 简化的边表示方法

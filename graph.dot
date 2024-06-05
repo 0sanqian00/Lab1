@@ -89,11 +89,9 @@ digraph G {
   "glow" -> "across" [label="1"];
   "softly" -> "in" [label="1"];
   "landscape" -> "as" [label="1"];
-  "trees" [style=filled, fillcolor=red];
-  "swayed" [style=filled, fillcolor=red];
-  "gently" [style=filled, fillcolor=red];
-  "in" [style=filled, fillcolor=red];
-  "trees" -> "swayed" [color=red, style=bold];
-  "swayed" -> "gently" [color=red, style=bold];
-  "gently" -> "in" [color=red, style=bold];
+  "evening" [style=filled, fillcolor=red];
+  "breeze" [style=filled, fillcolor=red];
+  "their" [style=filled, fillcolor=red];
+  "evening" -> "breeze" [color=red, style=bold];
+  "breeze" -> "their" [color=red, style=bold];
 }
