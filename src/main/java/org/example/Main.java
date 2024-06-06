@@ -35,7 +35,6 @@ public class Main {
      * 存储图中每条边的权重.
      * 键是起始单词，值是另一个映射，其键是目的单词，值是边的权重.
      */
-    private static volatile boolean stopRandomWalk = false;
     private static Map<String, Map<String, Integer>> edgeWeights;
 
     /**
@@ -54,6 +53,7 @@ public class Main {
      * 存储顶点对之间的最短路径长度.
      * 二维数组，其中dist[i][j]表示从顶点i到顶点j的最短路径长度.
      */
+    private static volatile boolean stopRandomWalk = false;
     private static int[][] dist;
 
     /**
@@ -68,13 +68,15 @@ public class Main {
      * @param args 命令行参数，当前未使用。
      */
     public static void main(final String[] args) {
-        // 初始化图和单词频率映射
+        // 初始化数据结构
         graph = new HashMap<>();
         wordFrequency = new HashMap<>();
         edgeWeights = new HashMap<>();
 
+
         // 读取文本文件并构建图
-        readTextFileAndBuildGraph("D:\\software_lab\\LAB_1\\test1.txt");
+        readTextFileAndBuildGraph("C:\\Users\\三谦\\Desktop\\软件工程\\Lab1\\Lab1\\test\\test1.txt",graph,
+                wordFrequency, edgeWeights);
 
         Scanner scanner = new Scanner(System.in);
         char choice;
@@ -103,7 +105,7 @@ public class Main {
                     System.out.print("Enter word 2: ");
                     String word2 = scanner.nextLine();
                     System.out.println("Bridge words from '" + word1 + "' to '"
-                            + word2 + "': " + queryBridgeWords(word1, word2));
+                            + word2 + "': " + queryBridgeWords(graph, word1, word2));
                 }
                 case '3' -> {
                     System.out.println(
@@ -162,8 +164,12 @@ public class Main {
      * @param filePath 要读取的文本文件的路径。
      * @throws IOException 如果读取文件时发生I/O错误。
      */
-    private static void readTextFileAndBuildGraph(final String filePath) {
+    public static void readTextFileAndBuildGraph(final String filePath,
+                                                 Map<String, Set<String>> graph,
+                                                 Map<String, Integer> wordFrequency,
+                                                 Map<String, Map<String, Integer>> edgeWeights) {
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+
             String line;
             while ((line = br.readLine()) != null) {
                 // 转换为小写，并将非字母字符替换为空格
@@ -177,35 +183,34 @@ public class Main {
                     String nextWord = words[i + 1];
 
                     // 更新单词频率
-                    wordFrequency.put(
-                            currentWord, wordFrequency.getOrDefault(
-                                    currentWord, 0) + 1);
+                    wordFrequency.put(currentWord, wordFrequency.getOrDefault(currentWord, 0) + 1);
 
-                    // 添加边和更新权重
-                    graph.computeIfAbsent(currentWord,
-                            k -> new HashSet<>()).add(nextWord);
-                    updateWeight(currentWord, nextWord);
+                    // 添加边
+                    graph.computeIfAbsent(currentWord, k -> new HashSet<>()).add(nextWord);
+
+                    // 更新权重
+                    updateWeight(edgeWeights, currentWord, nextWord);
                 }
             }
-
             V = graph.size();
-            dist = new int[V][V];
+            dist = new int[V][V]; // 确保这部分在图构建完成后进行初始化
+
+
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private static void updateWeight(final String from, final String to) {
+    // 重载 updateWeight 方法以接受 edgeWeights 映射作为参数
+    private static void updateWeight(Map<String, Map<String, Integer>> edgeWeights, final String from, final String to) {
         // 获取从from到to的现有权重，如果没有设置，则默认为0
-        int currentWeight = edgeWeights.getOrDefault(
-                from, new HashMap<>()).getOrDefault(to, 0);
+        int currentWeight = edgeWeights.getOrDefault(from, new HashMap<>()).getOrDefault(to, 0);
 
-        // 权重加1，因为每次调用此方法意味着A和B又相邻出现了一次
+        // 权重加1，因为每次调用此方法意味着 from 和 to 又相邻出现了一次
         currentWeight += 1;
 
         // 更新边的权重
-        edgeWeights.computeIfAbsent(
-                from, k -> new HashMap<>()).put(to, currentWeight);
+        edgeWeights.computeIfAbsent(from, k -> new HashMap<>()).put(to, currentWeight);
     }
 
     /**
@@ -227,10 +232,10 @@ public class Main {
     public static void showDirectedGraph() {
         // DOT 文件将被创建在用户目录下
         String dotFilePath = "graph.dot";
-        String graphvizPath = "D:\\software_lab"
+        String graphvizPath = "C:\\Users\\三谦\\Desktop\\软件工程\\Lab1"
                 +
                 "\\Graphviz-11.0.0-win64\\bin\\dot.exe";
-        String pngFilePath = "D:\\software_lab\\LAB_1\\graph.png";
+        String pngFilePath = "C:\\Users\\三谦\\Desktop\\软件工程\\Lab1\\Lab1\\graph.png";
 
         // 创建DOT文件
         try (PrintWriter out = new PrintWriter(new FileWriter(dotFilePath))) {
@@ -286,7 +291,7 @@ public class Main {
 
     // 查询桥接词
     public static String queryBridgeWords(
-            final String word1, final String word2) {
+            final Map<String, Set<String>> graph ,final String word1, final String word2) {
         if (!graph.containsKey(word1) || !graph.containsKey(word2)) {
             return "No " + word1 + " or " + word2 + " in the graph!";
         }
@@ -337,7 +342,7 @@ public class Main {
             newWords.add(words[i]);
 
             // 查询这对相邻单词的桥接词
-            String bridgeWordsResult = queryBridgeWords(words[i], words[i + 1]);
+            String bridgeWordsResult = queryBridgeWords(graph, words[i], words[i + 1]);
             // 如果桥接词结果以"No bridge words"开头，则表示没有桥接词
             if (bridgeWordsResult.startsWith("No")) {
                 // 不插入任何单词，继续
@@ -450,10 +455,10 @@ public class Main {
 
         // 然后，创建DOT文件并添加常规的图结构
         String dotFilePath = "graph.dot";
-        String graphvizPath = "D:\\software_lab"
+        String graphvizPath = "C:\\Users\\三谦\\Desktop\\软件工程\\Lab1"
                 +
                 "\\Graphviz-11.0.0-win64\\bin\\dot.exe";
-        String pngFilePath = "D:\\software_lab\\LAB_1"
+        String pngFilePath = "C:\\Users\\三谦\\Desktop\\软件工程\\Lab1"
                 +
                 "\\graph_with_shortest_path.png";
 
